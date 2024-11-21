@@ -9,49 +9,43 @@ class ParseService {
     /// Private initializer to restrict instantiation to the `shared` instance only
     private init() {}
     
-    /// Calls a cloud function asynchronously and returns the result.
-    ///
-    /// - Parameters:
-    ///   - functionName: The name of the cloud function to be called.
-    ///   - params: A dictionary of parameters to be passed to the cloud function.
-    /// - Returns: The result of the cloud function call as the specified type `T`.
-    /// - Throws: An error if the cloud function call fails or the result type is unexpected.
-    
-    func callCloudFunction<T>(
-        functionName: String,
-        params: [String: Any]
-    ) async throws -> T {
+    /// Fetches historical events for a specific page.
+    /// - Parameter page: The page number to fetch data for.
+    /// - Returns: An array of `HistoricalItem` objects.
+    /// - Throws: An error if the fetch operation fails.
+    func fetchHistoricalEvents() async throws -> [HistoricalItem] {
         return try await withCheckedThrowingContinuation { continuation in
-            PFCloud.callFunction(inBackground: functionName, withParameters: params) { (result, error) in
+            PFCloud.callFunction(inBackground: "hello", withParameters: [:]) { (response, error) in
                 if let error = error {
-                    // If an error occurs, resume with the error.
                     continuation.resume(throwing: error)
-                } else if let result = result as? T {
-                    // If the result is of the expected type, resume with the result.
-                    continuation.resume(returning: result)
-                } else {
-                    // If the result type is unexpected, throw an error.
-                    
-                    let parseError = NSError(domain: "ParseError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Unexpected type of result"])
-                    continuation.resume(throwing: parseError)
+                    return
                 }
+                
+                guard let responseDict = response as? [String: Any],
+                      let pfObjects = responseDict["data"] as? [PFObject] else {
+                    continuation.resume(throwing: NSError(domain: "ParseError", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response format"]))
+                    return
+                }
+                
+                // Convert PFObjects to HistoricalItem
+                let historicalItems = pfObjects.map { pfObject -> HistoricalItem in
+                    return HistoricalItem(
+                        date: pfObject["date"] as? String ?? "",
+                        description: pfObject["description"] as? String ?? "",
+                        lang: pfObject["lang"] as? String ?? "",
+                        category1: pfObject["category1"] as? String ?? "",
+                        category2: pfObject["category2"] as? String ?? "",
+                        granularity: pfObject["granularity"] as? String ?? "",
+                        createdAt: pfObject.createdAt ?? Date(),
+                        updatedAt: pfObject.updatedAt ?? Date(),
+                        objectId: pfObject.objectId ?? "",
+                        type: "__type",
+                        className: pfObject.parseClassName ?? ""
+                    )
+                }
+                
+                continuation.resume(returning: historicalItems)
             }
-        }
-    }
-    
-    func fetchData() async throws -> [Data] {
-        let params: [String: Any] = [:]
-        
-        let result: [[String: String]] = try await callCloudFunction(functionName: "consultarDatos", params: params)
-        
-        return result.compactMap { dataMap in
-            guard let idString = dataMap["id"],
-                  let id = Int(idString),
-                  let name = dataMap["name"],
-                  let description = dataMap["description"] else {
-                return nil
-            }
-            return Data(id: id, name: name, description: description)
         }
     }
 }
