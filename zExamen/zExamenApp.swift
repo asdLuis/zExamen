@@ -21,20 +21,15 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         
         let parseConfig = ParseClientConfiguration {
             /// Assigns `applicationId`, `clientKey`, and `server` obtained from the configuration file.
-            $0.applicationId = "myStagingAppId"
-            $0.clientKey = "myStagingMasterKey"
-            $0.server = "https://dev-wushu.meeplab.com/parse/"
+            $0.applicationId = "APP_ID"
+            $0.clientKey = "MASTER_KEY"
+            $0.server = "https://examenes.meeplab.com/parse"
         }
 
         /// Initializes Parse with the provided configuration.
         Parse.initialize(with: parseConfig)
 
         return true
-    }
-
-    /// Function called when the device is successfully registered for remote notifications.
-    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
-        print("Device token: \(deviceToken)")
     }
 
     /// Function called if the remote notification registration fails.

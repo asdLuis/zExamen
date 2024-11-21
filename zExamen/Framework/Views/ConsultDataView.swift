@@ -1,95 +1,71 @@
 import SwiftUI
 
-/// ConsultDataView: A reusable component for listing, searching, and filtering data entries.
-///
-/// This SwiftUI View is designed to handle any generic data model, providing features like search,
-/// filtering, and a structured layout for data display.
+// View that displays historical data with search functionality
 struct ConsultDataView: View {
+    @StateObject private var viewModel = ConsultDataViewModel() // ViewModel to manage data and loading state
+    @State private var searchText = "" // Holds the search text entered by the user
     
-    @Environment(\.colorScheme) var colorScheme
-    // Adjust color scheme for light/dark mode compatibility.
-    
-    @State private var searchText = ""
-    @State private var isRegistering = false
-    
-    @StateObject private var viewModel = ConsultDataViewModel()
-    @StateObject private var toastManager = ToastManager.shared
+    // Computed property to filter items based on search text
+    var filteredItems: [HistoricalItem] {
+        // If search text is empty, return all data; otherwise, filter based on description or categories
+        searchText.isEmpty
+            ? viewModel.dataItems
+            : viewModel.dataItems.filter { item in
+                item.description.localizedCaseInsensitiveContains(searchText) ||
+                item.category1.localizedCaseInsensitiveContains(searchText) ||
+                item.category2.localizedCaseInsensitiveContains(searchText)
+            }
+    }
     
     var body: some View {
-        ZStack {
+        // Main container for the view with navigation support
+        NavigationView {
             VStack {
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(.white)
-            .ignoresSafeArea()
-            
-            GeometryReader { mainGeometry in
-                VStack {
-                    VStack {
-                        Image(systemName: "list.bullet.rectangle")
-                            .font(Font.custom("Marcellus", size: 50))
-                            .foregroundColor(colorScheme == .dark ? Color.black : Color.white)
-                        
-                        Text("Data Entries")
-                            .font(Font.custom("Times New Roman", size: 50))
-                            .bold()
-                            .foregroundColor(colorScheme == .dark ? Color.black : Color.white)
-                    }
-                    .padding(.top, mainGeometry.size.height * 0.03)
-                    
-                    GeometryReader { geometry in
-                        VStack {
-                            VStack {
-                                if viewModel.dataItems.isEmpty {
-                                    List {
-                                        ZStack {
-                                            Text("No data available.")
-                                                .font(Font.custom("Times New Roman", size: geometry.size.height * 0.03))
-                                                .multilineTextAlignment(.center)
-                                                .fixedSize(horizontal: false, vertical: true)
-                                                .shadow(color: Color.black.opacity(0.2), radius: 3, x: 1, y: 2)
-                                                .opacity(0.7)
-                                                .padding(.vertical, geometry.size.width * 0.4)
-                                                .frame(width: geometry.size.width * 0.9)
-                                        }
-                                        .listRowBackground(Color.clear)
-                                    }
-                                    .refreshable {
-                                        Task {
-                                            await viewModel.fetchData()
-                                        }
-                                    }
-                                    .listStyle(PlainListStyle())
-                                    .background(Color.clear)
-                                } else {
-                                    List(viewModel.dataItems, id: \.id) { dataItem in
-                                        ConsultDataListElement(
-                                            name: dataItem.name,
-                                            description: dataItem.description,
-                                            id: dataItem.id
-                                        )
-                                            .listRowInsets(EdgeInsets())
-                                            .listRowBackground(Color.clear)
-                                            .padding(.vertical, 5)
-                                    }
-                                    .refreshable {
-                                        Task {
-                                            await viewModel.fetchData()
-                                        }
-                                    }
-                                    .listStyle(PlainListStyle())
-                                    .background(Color.clear)
-                                }
-                            }
-                            .frame(height: mainGeometry.size.height * 0.55)
+                // Search bar at the top
+                SearchBar(text: $searchText)
+                    .padding(.horizontal)
+                    .padding(.top)
+                
+                // Show progress indicator if data is loading
+                if viewModel.isLoading {
+                    Spacer()
+                    ProgressView("Loading...")
+                        .progressViewStyle(CircularProgressViewStyle())
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding()
+                    Spacer()
+                } else if filteredItems.isEmpty {
+                    // Show a message when no items match the search
+                    Spacer()
+                    Text("No results found")
+                        .font(.headline)
+                        .foregroundColor(.gray)
+                        .padding()
+                    Button("Load again") {
+                        Task {
+                            await viewModel.fetchData()
                         }
-                        .frame(width: geometry.size.width, alignment: .center)
                     }
-                    .padding(.vertical, mainGeometry.size.height * 0.02)
+                    .buttonStyle(.bordered)
+                    .padding()
+                    Spacer()
+                } else {
+                    // Display the filtered historical items in a list
+                    List(filteredItems.prefix(10), id: \.objectId) { item in
+                            HistoricalItemView(item: item)
+                        }
+                        .listStyle(InsetGroupedListStyle())
+                        .refreshable {
+                            // Refresh the data when the user pulls down
+                            await viewModel.fetchData()
+                        }
                 }
             }
+            .navigationTitle("Historical Events") // Title for the navigation bar
+            .background(Color(.systemGroupedBackground).edgesIgnoringSafeArea(.all)) // Background color
         }
         .onAppear {
+            // Fetch data when the view appears
             Task {
                 await viewModel.fetchData()
             }
@@ -98,15 +74,75 @@ struct ConsultDataView: View {
     }
 }
 
-struct ConsultDataView_Previews: PreviewProvider {
-    static var previews: some View {
-        // Provide a mock ViewModel with sample data for the preview
-        let mockViewModel = ConsultDataViewModel()
-        mockViewModel.dataItems = [
-            Data(id: 1, name: "Sample Entry 1", description: "This is a sample description."),
-            Data(id: 2, name: "Sample Entry 2", description: "Another example entry for testing.")
-        ]
-        
-        return ConsultDataView()
+// Custom search bar view
+struct SearchBar: View {
+    @Binding var text: String // Binding to the parent view's search text
+    
+    var body: some View {
+        HStack {
+            // Magnifying glass icon
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(.secondary)
+            
+            // Text field for search input
+            TextField("Search historical events", text: $text)
+                .textFieldStyle(PlainTextFieldStyle())
+                .disableAutocorrection(true)
+            
+            // Clear button to reset search text
+            if !text.isEmpty {
+                Button(action: { text = "" }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(10)
+        .background(Color(.systemGray5)) // Background color for the search bar
+        .cornerRadius(12) // Rounded corners for the search bar
+    }
+}
+
+// View that displays individual historical item details
+struct HistoricalItemView: View {
+    let item: HistoricalItem // Historical item to display
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                // Display date of the event
+                Text(item.date)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                // Display the categories
+                Text("\(item.category1) • \(item.category2)")
+                    .font(.subheadline)
+                    .foregroundColor(.blue)
+            }
+            
+            // Description of the event (limited to 3 lines)
+            Text(item.description)
+                .font(.body)
+                .lineLimit(3)
+            
+            // Language label
+            HStack {
+                Spacer()
+                Text(item.lang.uppercased())
+                    .font(.caption)
+                    .padding(6)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(8)
+                    .foregroundColor(.blue)
+            }
+        }
+        .padding()
+        .background(Color.white) // Background color for each item
+        .cornerRadius(12) // Rounded corners for each item
+        .shadow(color: Color.black.opacity(0.1), radius: 4, x: 0, y: 2) // Shadow effect for depth
+        .padding(.vertical, 4)
     }
 }
