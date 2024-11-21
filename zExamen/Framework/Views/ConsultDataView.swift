@@ -51,7 +51,7 @@ struct ConsultDataView: View {
                     Spacer()
                 } else {
                     // Display the filtered historical items in a list
-                    List(filteredItems.prefix(10), id: \.objectId) { item in
+                    List(filteredItems, id: \.objectId) { item in
                             HistoricalItemView(item: item)
                         }
                         .listStyle(InsetGroupedListStyle())
